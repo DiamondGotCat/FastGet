@@ -3,4 +3,4 @@
 
 ## How
 It's using Multiple Thread Download.
-This is need Server-side Range-select download Support.
+This is need Client-side Range select download Support.
