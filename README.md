@@ -5,3 +5,8 @@
 It's using Multiple Thread Download.
 
 This is need Range-select feature, in Server-side.
+
+## Requiments
+- Python
+- `requests` (Library)
+- `rich` (Library)
