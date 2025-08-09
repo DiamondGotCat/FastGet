@@ -7,6 +7,7 @@ from rich.prompt import Prompt
 
 console = Console()
 
+VERSION = "2.0"
 URL = Prompt.ask("URL")
 OUTPUT_FILE = Prompt.ask("Save as", default=os.path.basename(URL))
 THREADS = int(Prompt.ask("Threads", default=8))
@@ -22,7 +23,7 @@ def get_file_size(url):
 
 def download_range(url, start, end, part_num, progress, task_id, headers=None):
     headers = headers or {}
-    headers.update({'User-Agent': f'FastGet/1.0 (Downloading with {THREADS} Thread(s), {part_num} Part(s), https://github.com/DiamondGotCat/FastGet/)'})
+    headers.update({'User-Agent': f'FastGet/{VERSION} (Downloading with {THREADS} Thread(s), {part_num} Part(s), https://github.com/DiamondGotCat/FastGet/)'})
     headers.update({'Range': f'bytes={start}-{end}'})
     try:
         response = requests.get(url, headers=headers, stream=True)
