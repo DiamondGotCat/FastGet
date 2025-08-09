@@ -7,19 +7,11 @@ from rich.prompt import Prompt
 
 console = Console()
 
-# ダウンロードするファイルのURL
 URL = Prompt.ask("URL")
-
-# 保存先ファイル名
 OUTPUT_FILE = Prompt.ask("Save as", default=os.path.basename(URL))
-
-# スレッド数（同時接続数）
 THREADS = int(Prompt.ask("Threads", default=8))
 
 def get_file_size(url):
-    """
-    ファイルのサイズを取得する関数
-    """
     response = requests.head(url, allow_redirects=True)
     if response.status_code == 200:
         file_size = int(response.headers.get('Content-Length', 0))
@@ -29,10 +21,8 @@ def get_file_size(url):
         raise Exception(f"Failed to retrieve file info. Status code: {response.status_code}")
 
 def download_range(url, start, end, part_num, progress, task_id, headers=None):
-    """
-    指定された範囲をダウンロードする関数
-    """
     headers = headers or {}
+    headers.update({'User-Agent': f'FastGet/1.0 (Downloading with {THREADS} Thread(s), {part_num} Part(s), https://github.com/DiamondGotCat/FastGet/)'})
     headers.update({'Range': f'bytes={start}-{end}'})
     try:
         response = requests.get(url, headers=headers, stream=True)
@@ -42,20 +32,38 @@ def download_range(url, start, end, part_num, progress, task_id, headers=None):
         return
 
     with open(f"{OUTPUT_FILE}.part{part_num}", 'wb') as f:
-        for chunk in response.iter_content(chunk_size=1024):
+        for chunk in response.iter_content(chunk_size=1024 * 128):
             if chunk:
                 f.write(chunk)
                 progress.update(task_id, advance=len(chunk))
 
 def merge_files(parts, output_file):
-    """
-    ダウンロードしたパーツを結合する関数
-    """
-    with open(output_file, 'wb') as outfile:
-        for part in parts:
-            with open(part, 'rb') as infile:
-                outfile.write(infile.read())
+    total_size = 0
+    for part in parts:
+        try:
+            total_size += os.path.getsize(part)
+        except OSError:
+            pass
+
+    with Progress() as progress:
+        merge_task = progress.add_task("Merging", total=total_size)
+
+        with open(output_file, 'wb') as outfile:
+            for part in parts:
+                with open(part, 'rb') as infile:
+                    # チャンクで読み書きしつつ進捗更新
+                    while True:
+                        chunk = infile.read(1024 * 256)
+                        if not chunk:
+                            break
+                        outfile.write(chunk)
+                        progress.update(merge_task, advance=len(chunk))
+
+    for part in parts:
+        try:
             os.remove(part)
+        except OSError:
+            pass
 
 def main():
     global THREADS
@@ -69,18 +77,16 @@ def main():
         console.print("Server has not supported multiple threads. Downloading in single thread...")
         THREADS = 1
 
-    part_size = file_size // THREADS
+    part_size = file_size // THREADS if THREADS > 0 else file_size
     threads = []
-    parts = []
+    parts = [f"{OUTPUT_FILE}.part{i}" for i in range(THREADS)]
 
     with Progress() as progress:
         task_id = progress.add_task("Downloading", total=file_size)
 
         for i in range(THREADS):
             start = part_size * i
-            # 最後のパートはファイルの終わりまで
             end = file_size - 1 if i == THREADS - 1 else start + part_size - 1
-            parts.append(f"{OUTPUT_FILE}.part{i}")
             thread = Thread(target=download_range, args=(URL, start, end, i, progress, task_id))
             threads.append(thread)
             thread.start()
@@ -88,7 +94,6 @@ def main():
         for thread in threads:
             thread.join()
 
-    # パーツを結合
     try:
         merge_files(parts, OUTPUT_FILE)
         console.print(f"[green]Download completed: {OUTPUT_FILE}[/green]")
