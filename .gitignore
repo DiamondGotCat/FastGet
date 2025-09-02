@@ -1,3 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
 # Python cache files
 __pycache__/
 *.pyc
@@ -10,12 +27,17 @@ venv/
 env/
 ENV/
 
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
+# Virtual environments
+venv/
+env/
+.env
+=======
 # OS files
 .DS_Store
 Thumbs.db
