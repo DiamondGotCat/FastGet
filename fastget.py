@@ -17,7 +17,8 @@ def get_file_size(url):
     if response.status_code == 200:
         file_size = int(response.headers.get('Content-Length', 0))
         accept_ranges = response.headers.get('Accept-Ranges', 'none')
-        return file_size, accept_ranges.lower() == 'bytes'
+        reject_fastget = response.headers.get('RejectFastGet', '').lower() in ['true', '1', 'yes']
+        return file_size, accept_ranges.lower() == 'bytes', reject_fastget
     else:
         raise Exception(f"Failed to retrieve file info. Status code: {response.status_code}")
 
@@ -69,12 +70,15 @@ def merge_files(parts, output_file):
 def main():
     global THREADS
     try:
-        file_size, is_resumable = get_file_size(URL)
+        file_size, is_resumable, is_fastget_rejected = get_file_size(URL)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         return
 
-    if not is_resumable:
+    if is_fastget_rejected:
+        console.print("Server has rejected FastGet parallel downloads. Downloading in single thread...")
+        THREADS = 1
+    elif not is_resumable:
         console.print("Server has not supported multiple threads. Downloading in single thread...")
         THREADS = 1
 
