@@ -49,7 +49,7 @@ jobs:
       - name: Download NABS
         shell: bash
         run: |
-          wget https://raw.githubusercontent.com/DiamondGotCat/NABS/refs/heads/main/pynabs.py
+          curl -O https://raw.githubusercontent.com/DiamondGotCat/NABS/refs/heads/main/pynabs.py
 
       - name: Build (non-windows)
         if: runner.os != 'Windows'
