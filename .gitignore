@@ -14,6 +14,7 @@ dist/
 *.temp
 .DS_Store
 Thumbs.db
+*.part*
 
 # Python cache files
 __pycache__/
@@ -23,6 +24,7 @@ __pycache__/
 .Python
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
@@ -33,11 +35,6 @@ ENV/
 *.swp
 *.swo
 
-# Virtual environments
-venv/
-env/
-.env
-=======
 # OS files
 .DS_Store
 Thumbs.db
@@ -51,8 +48,3 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Temporary files
-*.tmp
-*.temp
-.part*
