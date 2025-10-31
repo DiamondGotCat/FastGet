@@ -60,7 +60,7 @@ def merge_files(parts, output_file):
             pass
 
     total_steps = max(1, math.ceil(total_size / MERGE_CHUNK))
-    merge_bar = nm.modernProgressBar(total=total_steps, process_name="Marge", process_color=33, spinner_mode=False)
+    merge_bar = ModernProgressBar(total=total_steps, process_name="Marge", spinner_mode=False)
     merge_bar.start()
 
     try:
