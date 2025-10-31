@@ -5,11 +5,11 @@ from threading import Thread, Lock
 from rich.console import Console
 from rich.prompt import Prompt
 from datetime import datetime, timezone
-from nercone_modern import NerconeModern
+from nercone_modern.logging import ModernLogging
+from nercone_modern.progressbar import ModernProgressBar
 
 console = Console()
-nm = NerconeModern()
-logger = nm.modernLogging(process_name="FastGet")
+logger = ModernLogging(process_name="FastGet")
 
 VERSION = "2.0"
 URL = Prompt.ask("URL")
@@ -104,7 +104,7 @@ def main():
     parts = [f"{OUTPUT_FILE}.part{i}" for i in range(THREADS)]
 
     total_download_steps = max(1, math.ceil(file_size / DOWNLOAD_CHUNK))
-    download_bar = nm.modernProgressBar(total=total_download_steps, process_name=f"Download", process_color=32, spinner_mode=False)
+    download_bar = ModernProgressBar(total=total_download_steps, process_name="Download", spinner_mode=False)
     download_bar.start()
     start_time = datetime.now(timezone.utc)
     for i in range(THREADS):
