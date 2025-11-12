@@ -2,6 +2,7 @@ import os
 import math
 import requests
 from threading import Thread, Lock
+from urllib.parse import urlparse, unquote
 from rich.console import Console
 from rich.prompt import Prompt
 from datetime import datetime, timezone
@@ -11,13 +12,11 @@ from nercone_modern.progressbar import ModernProgressBar
 console = Console()
 logger = ModernLogging(process_name="FastGet")
 
-VERSION = "2.0"
+VERSION = "3.0"
 URL = Prompt.ask("URL")
-OUTPUT_FILE = Prompt.ask("Save as", default=os.path.basename(URL))
-THREADS = int(Prompt.ask("Threads", default=8))
-
-DOWNLOAD_CHUNK = 1024 * 128   # 128KB
-MERGE_CHUNK    = 1024 * 256   # 256KB
+OUTPUT_FILE = Prompt.ask("Save as", default=unquote(os.path.basename(urlparse(URL).path)))
+THREADS = int(Prompt.ask("Threads", default=4))
+CHUNK = 1024 * 128   # 128KB
 
 progress_lock = Lock()
 
@@ -31,7 +30,7 @@ def get_file_size(url):
     else:
         raise Exception(f"Failed to retrieve file info. Status code: {response.status_code}")
 
-def download_range(url, start, end, part_num, all_bar, thread_bar, headers=None):
+def download_range(url, start, end, part_num, all_bar: ModernProgressBar, thread_bar: ModernProgressBar, headers=None):
     headers = headers or {}
     headers.update({'User-Agent': f'FastGet/{VERSION} (Downloading with {THREADS} Thread(s), {part_num} Part(s), https://github.com/DiamondGotCat/FastGet/)'})
     headers.update({'Range': f'bytes={start}-{end}'})
@@ -39,12 +38,12 @@ def download_range(url, start, end, part_num, all_bar, thread_bar, headers=None)
         response = requests.get(url, headers=headers, stream=True)
         response.raise_for_status()
     except requests.RequestException as e:
-        console.print(f"[red]Error downloading part {part_num}: {e}[/red]")
+        thread_bar.setMessage(f"RequestException: {e}")
         return
 
     part_path = f"{OUTPUT_FILE}.part{part_num}"
     with open(part_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK):
+        for chunk in response.iter_content(chunk_size=CHUNK):
             if not chunk:
                 continue
             f.write(chunk)
@@ -60,7 +59,7 @@ def merge_files(parts, output_file):
         except OSError:
             pass
 
-    total_steps = max(1, math.ceil(total_size / MERGE_CHUNK))
+    total_steps = max(1, math.ceil(total_size / CHUNK))
     merge_bar = ModernProgressBar(total=total_steps, process_name="Marge", spinner_mode=False)
     merge_bar.start()
 
@@ -71,7 +70,7 @@ def merge_files(parts, output_file):
                     continue
                 with open(part, 'rb') as infile:
                     while True:
-                        chunk = infile.read(MERGE_CHUNK)
+                        chunk = infile.read(CHUNK)
                         if not chunk:
                             break
                         outfile.write(chunk)
@@ -104,7 +103,7 @@ def main():
     threads = []
     parts = [f"{OUTPUT_FILE}.part{i}" for i in range(THREADS)]
 
-    total_download_steps = max(1, math.ceil(file_size / DOWNLOAD_CHUNK))
+    total_download_steps = max(1, math.ceil(file_size / CHUNK))
     download_bar_all = ModernProgressBar(total=total_download_steps, process_name="DL All", spinner_mode=False)
 
     thread_bars = []
@@ -112,7 +111,7 @@ def main():
         start = part_size * i
         end = file_size - 1 if i == THREADS - 1 else start + part_size - 1
         part_bytes = max(0, end - start + 1)
-        part_steps = max(1, math.ceil(part_bytes / DOWNLOAD_CHUNK))
+        part_steps = max(1, math.ceil(part_bytes / CHUNK))
         bar = ModernProgressBar(total=part_steps, process_name=f"DL #{i + 1}", spinner_mode=False)
         thread_bars.append(bar)
 
