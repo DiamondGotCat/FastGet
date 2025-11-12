@@ -1,5 +1,7 @@
 import os, math, requests, argparse
-from threading import Thread, Lock
+from typing import Union, Literal
+from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
+from threading import Thread, Lock, Event
 from urllib.parse import urlparse, unquote
 from rich.console import Console
 from rich.prompt import Prompt
@@ -8,17 +10,18 @@ from nercone_modern.progressbar import ModernProgressBar
 
 console = Console()
 
-VERSION = "4.1"
+VERSION = "4.2"
 CHUNK = 1024 * 128 # 128KB
 
 progress_lock = Lock()
+stop_event = Event()
 
 def get_file_name(url):
     return unquote(os.path.basename(urlparse(url).path))
 
 def get_file_size(url):
     response = requests.head(url, allow_redirects=True)
-    if response.status_code == 200:
+    if response.status_code in [200, 302]:
         file_size = int(response.headers.get('Content-Length', 0))
         accept_ranges = response.headers.get('Accept-Ranges', 'none')
         reject_fastget = response.headers.get('RejectFastGet', '').strip().lower() in ['1', 'y', 'yes', 'true', 'enabled']
@@ -26,10 +29,39 @@ def get_file_size(url):
     else:
         raise Exception(f"Failed to retrieve file info. Status code: {response.status_code}")
 
-def download_range(url, start, end, part_num, output, threads, all_bar: ModernProgressBar, thread_bar: ModernProgressBar, headers=None):
+def format_filesize(num_bytes: Union[int, float], *, decimals: int = 2, rounding: Literal["half_up", "floor"] = "half_up", strip_trailing_zeros: bool = False) -> str:
+    units = ["B", "KB", "MB", "GB", "TB", "PB", "EB"]
+    try:
+        n = int(num_bytes)
+    except Exception as e:
+        raise TypeError("num_bytes must be a number that can be converted to an integer") from e
+    sign = "-" if n < 0 else ""
+    b = abs(n)
+    if b < 1000:
+        return f"{sign}{b} B ({sign}{b:,} B)"
+    value = Decimal(b)
+    idx = 0
+    thousand = Decimal(1000)
+    while value >= thousand and idx < len(units) - 1:
+        value /= thousand
+        idx += 1
+    q = Decimal(f"1e-{decimals}") if decimals > 0 else Decimal(1)
+    mode = ROUND_HALF_UP if rounding == "half_up" else ROUND_DOWN
+    rounded = value.quantize(q, rounding=mode)
+    if strip_trailing_zeros and decimals > 0:
+        short = f"{rounded.normalize()}"
+        if "E" in short or "e" in short:
+            short = f"{rounded:.{decimals}f}".rstrip("0").rstrip(".")
+    else:
+        short = f"{rounded:.{decimals}f}" if decimals > 0 else f"{int(rounded)}"
+    return f"{sign}{short}{units[idx]} ({sign}{b:,} B)"
+
+def download_range(url, start, end, part_num, output, threads, all_bar: ModernProgressBar, thread_bar: ModernProgressBar, headers=None, stop: Event = None):
     headers = headers or {}
     headers.update({'User-Agent': f'FastGet/{VERSION} (Downloading with {threads} Thread(s), {part_num} Part(s), https://github.com/DiamondGotCat/FastGet/)'})
     headers.update({'Range': f'bytes={start}-{end}'})
+    if stop and stop.is_set():
+        return
     try:
         response = requests.get(url, headers=headers, stream=True)
         response.raise_for_status()
@@ -38,14 +70,22 @@ def download_range(url, start, end, part_num, output, threads, all_bar: ModernPr
         return
 
     part_path = f"{output}.part{part_num}"
-    with open(part_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=CHUNK):
-            if not chunk:
-                continue
-            f.write(chunk)
-            with progress_lock:
-                thread_bar.update()
-                all_bar.update()
+    try:
+        with open(part_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=CHUNK):
+                if stop and stop.is_set():
+                    break
+                if not chunk:
+                    continue
+                f.write(chunk)
+                with progress_lock:
+                    thread_bar.update()
+                    all_bar.update()
+    finally:
+        try:
+            response.close()
+        except Exception:
+            pass
 
 def merge_files(parts, output_file):
     total_size = 0
@@ -96,6 +136,8 @@ def main():
         console.print(f"[red]Error: {e}[/red]")
         return
 
+    console.print(f"[blue][bold]Total file size: [/bold]{format_filesize(file_size)}[/blue]")
+
     threads = args.threads
     if is_fastget_rejected:
         console.print("[yellow]Server has rejected FastGet parallel downloads. Downloading in single thread...[/yellow]")
@@ -125,18 +167,41 @@ def main():
 
     start_time = datetime.now(timezone.utc)
     thread_objs = []
-    for i in range(threads):
-        start = part_size * i
-        end = file_size - 1 if i == threads - 1 else start + part_size - 1
-        thread = Thread(
-            target=download_range,
-            args=(args.url, start, end, i, args.output, threads, download_bar_all, thread_bars[i])
-        )
-        thread_objs.append(thread)
-        thread.start()
+    try:
+        for i in range(threads):
+            start = part_size * i
+            end = file_size - 1 if i == threads - 1 else start + part_size - 1
+            thread = Thread(
+                target=download_range,
+                args=(args.url, start, end, i, args.output, threads, download_bar_all, thread_bars[i], None, stop_event)
+            )
+            thread_objs.append(thread)
+            thread.start()
 
-    for thread in thread_objs:
-        thread.join()
+        for thread in thread_objs:
+            thread.join()
+    except KeyboardInterrupt:
+        stop_event.set()
+        console.print("[red]Interrupted. Stopping threads and cleaning up... [/red]", end="")
+        for thread in thread_objs:
+            try:
+                thread.join()
+            except Exception:
+                pass
+        for part in parts:
+            try:
+                if os.path.exists(part):
+                    os.remove(part)
+            except Exception:
+                pass
+        try:
+            if os.path.exists(args.output):
+                os.remove(args.output)
+        except Exception:
+            pass
+        console.print("[red]Done.[/red]")
+        return
+
     end_time = datetime.now(timezone.utc)
     delta = end_time - start_time
     duration_ms = delta.days*24*3600*1000 + delta.seconds*1000 + delta.microseconds//1000
