@@ -10,7 +10,7 @@ It's using Multiple Thread Download.
 This is need Range-select feature, in Server-side.
 
 ## Requiments
-- Python
-- `requests` (Library)
-- `rich` (Library)
-- `nercone-modern` (Library)
+- CPython 3.9+
+- `requests` [PyPI↗︎](https://pypi.org/project/requests/)
+- `rich` [PyPI↗︎](https://pypi.org/project/rich/)
+- `nercone-modern` [PyPI↗︎](https://pypi.org/project/nercone-modern/)
