@@ -12,7 +12,7 @@ from nercone_modern.progressbar import ModernProgressBar
 console = Console()
 logger = ModernLogging(process_name="FastGet")
 
-VERSION = "3.0"
+VERSION = "4.0"
 URL = Prompt.ask("URL")
 OUTPUT_FILE = Prompt.ask("Save as", default=unquote(os.path.basename(urlparse(URL).path)))
 THREADS = int(Prompt.ask("Threads", default=4))
