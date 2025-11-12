@@ -31,7 +31,7 @@ def get_file_size(url):
     else:
         raise Exception(f"Failed to retrieve file info. Status code: {response.status_code}")
 
-def download_range(url, start, end, part_num, progress_bar, headers=None):
+def download_range(url, start, end, part_num, all_bar, thread_bar, headers=None):
     headers = headers or {}
     headers.update({'User-Agent': f'FastGet/{VERSION} (Downloading with {THREADS} Thread(s), {part_num} Part(s), https://github.com/DiamondGotCat/FastGet/)'})
     headers.update({'Range': f'bytes={start}-{end}'})
@@ -49,7 +49,8 @@ def download_range(url, start, end, part_num, progress_bar, headers=None):
                 continue
             f.write(chunk)
             with progress_lock:
-                progress_bar.update()
+                thread_bar.update()
+                all_bar.update()
 
 def merge_files(parts, output_file):
     total_size = 0
@@ -104,13 +105,29 @@ def main():
     parts = [f"{OUTPUT_FILE}.part{i}" for i in range(THREADS)]
 
     total_download_steps = max(1, math.ceil(file_size / DOWNLOAD_CHUNK))
-    download_bar = ModernProgressBar(total=total_download_steps, process_name="Download", spinner_mode=False)
-    download_bar.start()
+    download_bar_all = ModernProgressBar(total=total_download_steps, process_name="DL All", spinner_mode=False)
+
+    thread_bars = []
+    for i in range(THREADS):
+        start = part_size * i
+        end = file_size - 1 if i == THREADS - 1 else start + part_size - 1
+        part_bytes = max(0, end - start + 1)
+        part_steps = max(1, math.ceil(part_bytes / DOWNLOAD_CHUNK))
+        bar = ModernProgressBar(total=part_steps, process_name=f"DL #{i + 1}", spinner_mode=False)
+        thread_bars.append(bar)
+
+    download_bar_all.start()
+    for bar in thread_bars:
+        bar.start()
+
     start_time = datetime.now(timezone.utc)
     for i in range(THREADS):
         start = part_size * i
         end = file_size - 1 if i == THREADS - 1 else start + part_size - 1
-        thread = Thread(target=download_range, args=(URL, start, end, i, download_bar))
+        thread = Thread(
+            target=download_range,
+            args=(URL, start, end, i, download_bar_all, thread_bars[i])
+        )
         threads.append(thread)
         thread.start()
     for thread in threads:
@@ -118,7 +135,10 @@ def main():
     end_time = datetime.now(timezone.utc)
     delta = end_time - start_time
     duration_ms = delta.days*24*3600*1000 + delta.seconds*1000 + delta.microseconds//1000
-    download_bar.finish()
+
+    download_bar_all.finish()
+    for bar in thread_bars:
+        bar.finish()
 
     try:
         merge_files(parts, OUTPUT_FILE)
