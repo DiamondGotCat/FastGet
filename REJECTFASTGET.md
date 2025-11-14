@@ -16,9 +16,11 @@ RejectFastGet: true
 ## Supported Values
 
 The following values will cause FastGet to fall back to single-threaded downloads:
-- `RejectFastGet: true`
 - `RejectFastGet: 1` 
+- `RejectFastGet: y` 
 - `RejectFastGet: yes`
+- `RejectFastGet: true`
+- `RejectFastGet: enabled`
 
 All values are case-insensitive.
 
