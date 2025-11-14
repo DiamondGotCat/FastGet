@@ -109,3 +109,7 @@ Total file size: 2.74GB (2,742,190,080 B)
 (---------------------) DL #7 -  14% ( 368/2616) | No Message
 (---------------------) DL #8 -  11% ( 292/2616) | No Message
 ```
+
+---
+
+![PyPI - Version](https://img.shields.io/pypi/v/nercone-fastget)
