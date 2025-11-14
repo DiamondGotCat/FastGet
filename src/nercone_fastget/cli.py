@@ -1,4 +1,5 @@
 import os, math, requests, argparse
+from importlib.metadata import version
 from typing import Union, Literal
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
 from threading import Thread, Lock, Event
@@ -10,7 +11,7 @@ from nercone_modern.progressbar import ModernProgressBar
 
 console = Console()
 
-VERSION = "4.2"
+VERSION = version("nercone-fastget")
 CHUNK = 1024 * 128 # 128KB
 
 progress_lock = Lock()
