@@ -11,7 +11,7 @@ This is need Range-select feature, in Server-side.
 
 ## Requiments
 - CPython 3.9+
-- `pip3` [PyPI↗︎](https://pypi.org/project/pip/) or `uv` [PyPI↗︎](https://pypi.org/project/uv/)
+- `uv` [PyPI↗︎](https://pypi.org/project/uv/) or `pip3` [PyPI↗︎](https://pypi.org/project/pip/) 
 - `nercone-modern` [PyPI↗︎](https://pypi.org/project/nercone-modern/)
 - `rich` [PyPI↗︎](https://pypi.org/project/rich/)
 - `requests` [PyPI↗︎](https://pypi.org/project/requests/)
