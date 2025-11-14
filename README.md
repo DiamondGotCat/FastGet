@@ -11,6 +11,26 @@ This is need Range-select feature, in Server-side.
 
 ## Requiments
 - CPython 3.9+
-- `requests` [PyPI↗︎](https://pypi.org/project/requests/)
-- `rich` [PyPI↗︎](https://pypi.org/project/rich/)
+- `pip3` [PyPI↗︎](https://pypi.org/project/pip/) or `uv` [PyPI↗︎](https://pypi.org/project/uv/)
 - `nercone-modern` [PyPI↗︎](https://pypi.org/project/nercone-modern/)
+- `rich` [PyPI↗︎](https://pypi.org/project/rich/)
+- `requests` [PyPI↗︎](https://pypi.org/project/requests/)
+
+## Installation
+
+### using uv (recommended)
+```
+uv tool install nercone-fastget
+```
+
+### using pip3
+
+**System Python:**
+```
+pip3 install nercone-fastget --break-system-packages
+```
+
+**Venv Python:**
+```
+pip3 install nercone-fastget
+```
