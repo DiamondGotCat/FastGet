@@ -35,6 +35,25 @@ pip3 install nercone-fastget --break-system-packages
 pip3 install nercone-fastget
 ```
 
+## Update
+
+### using uv (recommended)
+```
+uv tool install nercone-fastget --upgrade
+```
+
+### using pip3
+
+**System Python:**
+```
+pip3 install nercone-fastget --upgrade --break-system-packages
+```
+
+**Venv Python:**
+```
+pip3 install nercone-fastget --upgrade
+```
+
 ## Usage
 
 ### Show helps
