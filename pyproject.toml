@@ -3,7 +3,7 @@ requires = ["uv_build>=0.9.5,<0.10.0"]
 build-backend = "uv_build"
 
 [project]
-name = "fastget"
+name = "nercone-fastget"
 version = "4.3.0"
 description = "High-speed File Downloading Tool"
 readme = { file = "README.md", content-type = "text/markdown" }
