@@ -97,7 +97,7 @@ def merge_files(parts, output_file):
             pass
 
     total_steps = max(1, math.ceil(total_size / CHUNK))
-    merge_bar = ModernProgressBar(total=total_steps, process_name="Marge", spinner_mode=False, box_left="(", box_right=")")
+    merge_bar = ModernProgressBar(total=total_steps, process_name="Marge", spinner_mode=False, box_left="(", box_right=")", show_bar=False)
     merge_bar.start()
 
     try:
@@ -151,7 +151,7 @@ def main():
     parts = [f"{args.output}.part{i}" for i in range(threads)]
 
     total_download_steps = max(1, math.ceil(file_size / CHUNK))
-    download_bar_all = ModernProgressBar(total=total_download_steps, process_name="DL All", spinner_mode=False, box_left="(", box_right=")")
+    download_bar_all = ModernProgressBar(total=total_download_steps, process_name="DL All", spinner_mode=False, box_left="(", box_right=")", show_bar=False)
 
     thread_bars = []
     for i in range(threads):
@@ -159,7 +159,7 @@ def main():
         end = file_size - 1 if i == threads - 1 else start + part_size - 1
         part_bytes = max(0, end - start + 1)
         part_steps = max(1, math.ceil(part_bytes / CHUNK))
-        bar = ModernProgressBar(total=part_steps, process_name=f"DL #{i + 1}", spinner_mode=False, box_left="(", box_right=")")
+        bar = ModernProgressBar(total=part_steps, process_name=f"DL #{i + 1}", spinner_mode=False, box_left="(", box_right=")", show_bar=False)
         thread_bars.append(bar)
 
     download_bar_all.start()
