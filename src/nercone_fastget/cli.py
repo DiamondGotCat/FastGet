@@ -4,12 +4,9 @@ from typing import Union, Literal
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
 from threading import Thread, Lock, Event
 from urllib.parse import urlparse, unquote
-from rich.console import Console
-from rich.prompt import Prompt
 from datetime import datetime, timezone
+from nercone_modern.logging import ModernLogging
 from nercone_modern.progressbar import ModernProgressBar
-
-console = Console()
 
 VERSION = version("nercone-fastget")
 CHUNK = 1024 * 128 # 128KB
@@ -122,7 +119,8 @@ def merge_files(parts, output_file):
             pass
 
 def main():
-    parser = argparse.ArgumentParser(prog='FastGet', description='High-speed File Downloading Tool')
+    logger = ModernLogging("fastget", show_level=False, show_proc=False)
+    parser = argparse.ArgumentParser(prog='fastget', description='High-speed File Downloading Tool')
     parser.add_argument('url')
     parser.add_argument('-o', '--output', default=None)
     parser.add_argument('-t', '--threads', default=4, type=int)
@@ -134,18 +132,27 @@ def main():
     try:
         file_size, is_resumable, is_fastget_rejected = get_file_size(args.url)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        logger.log(f"{e}", "CRITICAL")
         return
 
-    console.print(f"[blue][bold]Total file size:[/bold] [not bold]{format_filesize(file_size)}[/not bold][/blue]")
+    logger.log(f"Total file size: {format_filesize(file_size)}")
 
     threads = args.threads
+    cannot_use_parallel_downloads = False
     if is_fastget_rejected:
-        console.print("[yellow]Server has rejected FastGet parallel downloads. Downloading in single thread...[/yellow]")
-        threads = 1
+        cannot_use_parallel_downloads = True
+        logger.log("Server has rejected FastGet parallel downloads.", "ERROR")
     elif not is_resumable:
-        console.print("[yellow]Server has not supported multiple threads. Downloading in single thread...[/yellow]")
-        threads = 1
+        cannot_use_parallel_downloads = True
+        logger.log("The specified server does not support ranged file downloads.", "ERROR")
+        logger.log("Therefore, parallel downloads are not available.", "ERROR")
+    if cannot_use_parallel_downloads:
+        use_regular_download_instead = logger.prompt("Would you like to use a single-threaded regular download instead?", default="Y", choices=["Y", "n"], interrupt_default="n")
+        if use_regular_download_instead == "Y":
+            threads = 1
+        else:
+            logger.log("Aborted.")
+            return
 
     part_size = file_size // threads if threads > 0 else file_size
     parts = [f"{args.output}.part{i}" for i in range(threads)]
@@ -183,7 +190,7 @@ def main():
             thread.join()
     except KeyboardInterrupt:
         stop_event.set()
-        console.print("[red]Interrupted. Stopping threads and cleaning up... [/red]", end="")
+        logger.log("Interrupted. Stopping threads and cleaning up...")
         for thread in thread_objs:
             try:
                 thread.join()
@@ -200,7 +207,6 @@ def main():
                 os.remove(args.output)
         except Exception:
             pass
-        console.print("[red]Done.[/red]")
         return
 
     end_time = datetime.now(timezone.utc)
@@ -213,9 +219,9 @@ def main():
 
     try:
         merge_files(parts, args.output)
-        console.print(f"[green]Download completed in {duration_ms}ms: {args.output}[/green]")
+        logger.log(f"Download completed in {duration_ms}ms. Saved to: {args.output}")
     except Exception as e:
-        console.print(f"[red]Error merging files: {e}[/red]")
+        logger.log(f"Error merging files: {e}", "CRITICAL")
 
 if __name__ == "__main__":
     main()
