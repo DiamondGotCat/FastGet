@@ -9,7 +9,7 @@ from nercone_modern.logging import ModernLogging
 from nercone_modern.progressbar import ModernProgressBar
 
 VERSION = version("nercone-fastget")
-CHUNK = 1024 * 128 # 128KB
+CHUNK = 1024 * 128 # 128KiB
 
 progress_lock = Lock()
 stop_event = Event()
