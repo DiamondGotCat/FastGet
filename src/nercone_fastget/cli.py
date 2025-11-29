@@ -9,7 +9,8 @@ from nercone_modern.logging import ModernLogging
 from nercone_modern.progressbar import ModernProgressBar
 
 VERSION = version("nercone-fastget")
-CHUNK = 1024 * 128 # 128KiB
+DOWNLOAD_CHUNK = 1024 * 128
+MARGE_CHUNK = 1024 * 128
 
 progress_lock = Lock()
 stop_event = Event()
@@ -70,7 +71,7 @@ def download_range(url, start, end, part_num, output, threads, all_bar: ModernPr
     part_path = f"{output}.part{part_num}"
     try:
         with open(part_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=CHUNK):
+            for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK):
                 if stop and stop.is_set():
                     break
                 if not chunk:
@@ -93,7 +94,7 @@ def merge_files(parts, output_file):
         except OSError:
             pass
 
-    total_steps = max(1, math.ceil(total_size / CHUNK))
+    total_steps = max(1, math.ceil(total_size / MARGE_CHUNK))
     merge_bar = ModernProgressBar(total=total_steps, process_name="Marge", spinner_mode=False, box_left="(", box_right=")", show_vertical_bar=True)
     merge_bar.start()
 
@@ -104,7 +105,7 @@ def merge_files(parts, output_file):
                     continue
                 with open(part, 'rb') as infile:
                     while True:
-                        chunk = infile.read(CHUNK)
+                        chunk = infile.read(MARGE_CHUNK)
                         if not chunk:
                             break
                         outfile.write(chunk)
@@ -119,12 +120,19 @@ def merge_files(parts, output_file):
             pass
 
 def main():
+    global DOWNLOAD_CHUNK, MARGE_CHUNK
+
     logger = ModernLogging("fastget", show_level=False, show_proc=False)
     parser = argparse.ArgumentParser(prog='fastget', description='High-speed File Downloading Tool')
-    parser.add_argument('url')
-    parser.add_argument('-o', '--output', default=None)
-    parser.add_argument('-t', '--threads', default=4, type=int)
+    parser.add_argument('url', help="URL of the file to download")
+    parser.add_argument('-o', '--output', default=None, help="Destination for downloaded files")
+    parser.add_argument('-t', '--threads', default=4, type=int, help="The number of threads to use for downloading")
+    parser.add_argument('-d', '--download-chunk', default=1024 * 128, type=int, help="Chunk used for Download step (bytes)")
+    parser.add_argument('-m', '--marge-chunk', default=1024 * 128, type=int, help="Chunk used for Marge step (bytes)")
     args = parser.parse_args()
+
+    DOWNLOAD_CHUNK = args.download_chunk
+    MARGE_CHUNK = args.marge_chunk
 
     if args.output is None:
         args.output = get_file_name(args.url)
@@ -157,7 +165,7 @@ def main():
     part_size = file_size // threads if threads > 0 else file_size
     parts = [f"{args.output}.part{i}" for i in range(threads)]
 
-    total_download_steps = max(1, math.ceil(file_size / CHUNK))
+    total_download_steps = max(1, math.ceil(file_size / DOWNLOAD_CHUNK))
     download_bar_all = ModernProgressBar(total=total_download_steps, process_name="DL All", spinner_mode=False, box_left="(", box_right=")", show_vertical_bar=True)
 
     thread_bars = []
@@ -165,7 +173,7 @@ def main():
         start = part_size * i
         end = file_size - 1 if i == threads - 1 else start + part_size - 1
         part_bytes = max(0, end - start + 1)
-        part_steps = max(1, math.ceil(part_bytes / CHUNK))
+        part_steps = max(1, math.ceil(part_bytes / DOWNLOAD_CHUNK))
         bar = ModernProgressBar(total=part_steps, process_name=f"DL #{i + 1}", spinner_mode=False, box_left="(", box_right=")", show_vertical_bar=True)
         thread_bars.append(bar)
 
