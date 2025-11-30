@@ -30,6 +30,15 @@ class ProgressCallback:
     async def on_complete(self) -> None:
         pass
 
+    async def on_merge_start(self, total_size: int) -> None:
+        pass
+
+    async def on_merge_update(self, loaded: int) -> None:
+        pass
+
+    async def on_merge_complete(self) -> None:
+        pass
+
     async def on_error(self, msg: str) -> None:
         pass
 
@@ -83,7 +92,7 @@ class FastGetSession:
         except Exception:
             return 0, False, True, httpx.Headers()
 
-    async def _download_worker(self, client: httpx.AsyncClient, method: str, url: str, start: int, end: int, worker_id: int, total_concurrency: int, file_handle, lock: asyncio.Lock, callback: ProgressCallback, **kwargs) -> None:
+    async def _download_worker(self, client: httpx.AsyncClient, method: str, url: str, start: int, end: int, worker_id: int, total_concurrency: int, part_path: str, callback: ProgressCallback, **kwargs) -> None:
         headers = kwargs.get("headers", {}).copy()
         headers["Range"] = f"bytes={start}-{end}"
         headers["User-Agent"] = f'FastGet/{VERSION} (Downloading with {total_concurrency} Thread(s), Connection No. {worker_id}, https://github.com/DiamondGotCat/nercone-fastget)'
@@ -93,19 +102,14 @@ class FastGetSession:
             try:
                 async with client.stream(method, url, **kwargs) as response:
                     response.raise_for_status()
-                    current_pos = start
 
-                    async for chunk in response.aiter_bytes(chunk_size=DEFAULT_CHUNK_SIZE):
-                        if not chunk:
-                            break
-
-                        async with lock:
-                            file_handle.seek(current_pos)
-                            file_handle.write(chunk)
-                        
-                        chunk_len = len(chunk)
-                        current_pos += chunk_len
-                        await callback.on_update(worker_id, chunk_len)
+                    with open(part_path, "wb") as f:
+                        async for chunk in response.aiter_bytes(chunk_size=DEFAULT_CHUNK_SIZE):
+                            if not chunk:
+                                break
+                            
+                            f.write(chunk)
+                            await callback.on_update(worker_id, len(chunk))
                 return
 
             except (httpx.RequestError, httpx.HTTPStatusError) as e:
@@ -141,24 +145,39 @@ class FastGetSession:
                     os.makedirs(out_dir, exist_ok=True)
 
                 if use_parallel:
-                    with open(output, "wb") as f:
-                        f.seek(file_size - 1)
-                        f.write(b"\0")
-
                     part_size = file_size // concurrency
                     tasks = []
-                    file_lock = asyncio.Lock()
+                    part_files = []
 
-                    with open(output, "r+b") as f:
-                        for i in range(concurrency):
-                            start = part_size * i
-                            end = file_size - 1 if i == concurrency - 1 else start + part_size - 1
-                            tasks.append(
-                                self._download_worker(
-                                    client, method, url, start, end, i, concurrency, f, file_lock, callback, **req_kwargs
-                                )
+                    for i in range(concurrency):
+                        start = part_size * i
+                        end = file_size - 1 if i == concurrency - 1 else start + part_size - 1
+                        
+                        part_path = f"{output}.part{i}"
+                        part_files.append(part_path)
+
+                        tasks.append(
+                            self._download_worker(
+                                client, method, url, start, end, i, concurrency, part_path, callback, **req_kwargs
                             )
-                        await asyncio.gather(*tasks)
+                        )
+
+                    await asyncio.gather(*tasks)
+
+                    await callback.on_merge_start(file_size)
+                    with open(output, "wb") as outfile:
+                        for part_file in part_files:
+                            if os.path.exists(part_file):
+                                with open(part_file, "rb") as infile:
+                                    while True:
+                                        chunk = infile.read(DEFAULT_CHUNK_SIZE)
+                                        if not chunk:
+                                            break
+                                        outfile.write(chunk)
+                                        await callback.on_merge_update(len(chunk))
+                                os.remove(part_file)
+
+                    await callback.on_merge_complete()
 
                 else:
                     headers["User-Agent"] = f'FastGet/{VERSION} (Downloading with 1 Thread(s), Connection No. 0, https://github.com/DiamondGotCat/nercone-fastget)'
@@ -176,7 +195,7 @@ class FastGetSession:
                 content_buffer = bytearray()
                 response_obj = None
                 headers["User-Agent"] = f'FastGet/{VERSION} (Downloading with 1 Thread(s), Connection No. 0, https://github.com/DiamondGotCat/nercone-fastget)'
-                
+
                 async with client.stream(method, url, **req_kwargs) as response:
                     response.raise_for_status()
                     response_obj = response

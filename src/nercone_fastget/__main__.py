@@ -12,6 +12,7 @@ class CLIProgress(fastget.ProgressCallback):
         self.all_bar = None
         self.thread_bars = []
         self.chunk_size_display = 1024 * 128
+        self.merge_accumulated = 0
 
     async def on_start(self, total_size: int, connections: int) -> None:
         self.logger.log(f"Starting: {total_size:,} bytes (Connections: {connections})")
@@ -52,6 +53,29 @@ class CLIProgress(fastget.ProgressCallback):
 
         for b in self.thread_bars:
             b.finish()
+
+    async def on_merge_start(self, total_size: int) -> None:
+        self.merge_accumulated = 0
+        if total_size > 0:
+            total_steps = max(1, math.ceil(total_size / self.chunk_size_display))
+            self.merge_bar = ModernProgressBar(
+                total=total_steps,
+                process_name="Merge",
+                spinner_mode=False,
+                show_vertical_bar=True
+            )
+            self.merge_bar.start()
+
+    async def on_merge_update(self, loaded: int) -> None:
+        if self.merge_bar:
+            self.merge_accumulated += loaded
+            while self.merge_accumulated >= self.chunk_size_display:
+                self.merge_bar.update()
+                self.merge_accumulated -= self.chunk_size_display
+
+    async def on_merge_complete(self) -> None:
+        if self.merge_bar:
+            self.merge_bar.finish()
 
     async def on_error(self, msg: str) -> None:
         self.logger.log(msg, "ERROR")
