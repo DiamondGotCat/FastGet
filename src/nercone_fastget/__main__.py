@@ -33,7 +33,7 @@ class CLIProgress(fastget.ProgressCallback):
                     p_steps = max(1, math.ceil(part_size / self.chunk_size_display))
                     bar = ModernProgressBar(
                         total=p_steps, 
-                        process_name=f"Conn #{i+1}", 
+                        process_name=f"DL #{i+1}", 
                         spinner_mode=False, 
                         show_vertical_bar=True
                     )
