@@ -15,28 +15,18 @@ class CLIProgress(fastget.ProgressCallback):
         self.merge_accumulated = 0
 
     async def on_start(self, total_size: int, connections: int) -> None:
-        self.logger.log(f"Starting: {total_size:,} bytes (Connections: {connections})")
+        self.logger.log(f"{total_size:,} bytes (Connections: {connections})")
 
         if total_size > 0:
             total_steps = max(1, math.ceil(total_size / self.chunk_size_display))
-            self.all_bar = ModernProgressBar(
-                total=total_steps, 
-                process_name="Total", 
-                spinner_mode=False, 
-                show_vertical_bar=True
-            )
+            self.all_bar = ModernProgressBar(total=total_steps, process_name="Total", spinner_mode=False)
             self.all_bar.start()
 
             if connections > 1:
                 part_size = total_size // connections
                 for i in range(connections):
                     p_steps = max(1, math.ceil(part_size / self.chunk_size_display))
-                    bar = ModernProgressBar(
-                        total=p_steps, 
-                        process_name=f"DL #{i+1}", 
-                        spinner_mode=False, 
-                        show_vertical_bar=True
-                    )
+                    bar = ModernProgressBar(total=p_steps, process_name=f"DL #{i+1}", spinner_mode=False)
                     bar.start()
                     self.thread_bars.append(bar)
 
@@ -58,12 +48,7 @@ class CLIProgress(fastget.ProgressCallback):
         self.merge_accumulated = 0
         if total_size > 0:
             total_steps = max(1, math.ceil(total_size / self.chunk_size_display))
-            self.merge_bar = ModernProgressBar(
-                total=total_steps,
-                process_name="Merge",
-                spinner_mode=False,
-                show_vertical_bar=True
-            )
+            self.merge_bar = ModernProgressBar(total=total_steps, process_name="Merge", spinner_mode=False)
             self.merge_bar.start()
 
     async def on_merge_update(self, loaded: int) -> None:
@@ -81,9 +66,9 @@ class CLIProgress(fastget.ProgressCallback):
         self.logger.log(msg, "ERROR")
 
 async def async_main() -> None:
-    logger = ModernLogging("fastget", show_level=False, show_proc=False)
+    logger = ModernLogging("fastget")
 
-    parser = argparse.ArgumentParser(prog='fastget', description='FastGet: Modern High-Performance Downloader')
+    parser = argparse.ArgumentParser(prog='fastget', description='Modern High-Performance Downloader')
     parser.add_argument('url', help="Target URL")
     parser.add_argument('-o', '--output', help="Write output to <file>")
     parser.add_argument('-X', '--request', default='GET', help="Specify request method")
