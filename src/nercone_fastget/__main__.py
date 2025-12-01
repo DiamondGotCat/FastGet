@@ -3,6 +3,7 @@ import math
 import argparse
 import asyncio
 from . import fastget
+from urllib.parse import urlparse
 from nercone_modern.logging import ModernLogging
 from nercone_modern.progressbar import ModernProgressBar
 
@@ -14,17 +15,24 @@ class CLIProgress(fastget.ProgressCallback):
         self.chunk_size_display = 1024 * 128
         self.merge_accumulated = 0
 
-    async def on_start(self, total_size: int, connections: int) -> None:
-        self.logger.log(f"{total_size:,} bytes (Connections: {connections})")
-
+    async def on_start(self, total_size: int, threads: int, http_version: str, final_url: str, verify_was_enabled: bool) -> None:
+        self.logger.log(f"File size: {total_size:,} bytes")
+        parsed_url = urlparse(final_url)
+        protocol = "HTTPS" if parsed_url.scheme.lower() == 'https' else "HTTP"
+        details = [http_version.upper()]
+        if protocol == "HTTPS":
+            details.append("TLS")
+            details.append("Verified" if verify_was_enabled else "Unverified")
+        connection_type = f"{protocol} ({', '.join(details)})"
+        self.logger.log(f"Connection Type: {connection_type}")
+        self.logger.log(f"Threads: {threads}")
         if total_size > 0:
             total_steps = max(1, math.ceil(total_size / self.chunk_size_display))
             self.all_bar = ModernProgressBar(total=total_steps, process_name="Total", spinner_mode=False)
             self.all_bar.start()
-
-            if connections > 1:
-                part_size = total_size // connections
-                for i in range(connections):
+            if threads > 1:
+                part_size = total_size // threads
+                for i in range(threads):
                     p_steps = max(1, math.ceil(part_size / self.chunk_size_display))
                     bar = ModernProgressBar(total=p_steps, process_name=f"DL #{i+1}", spinner_mode=False)
                     bar.start()
@@ -74,7 +82,7 @@ async def async_main() -> None:
     parser.add_argument('-X', '--request', default='GET', help="Specify request method")
     parser.add_argument('-d', '--data', help="HTTP POST data")
     parser.add_argument('-H', '--header', action='append', help="Pass custom header(s)")
-    parser.add_argument('-t', '--threads', dest='concurrency', type=int, default=fastget.DEFAULT_CONCURRENCY, help="Number of concurrent connections")
+    parser.add_argument('-t', '--threads', dest='threads', type=int, default=fastget.DEFAULT_THREADS, help="Number of concurrent connections")
     parser.add_argument('--no-http2', action='store_true', help="Disable HTTP/2")
     parser.add_argument('--no-verify', action='store_true', help="Disable SSL verification")
     parser.add_argument('--memory', action='store_true', help="Fetch to memory")
@@ -100,7 +108,7 @@ async def async_main() -> None:
     callback = CLIProgress(logger)
 
     session = fastget.FastGetSession(
-        max_concurrency=args.concurrency,
+        max_threads=args.threads,
         http2=not args.no_http2,
         verify=not args.no_verify
     )

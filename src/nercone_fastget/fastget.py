@@ -13,7 +13,7 @@ except Exception:
 DEFAULT_CHUNK_SIZE = 1024 * 64
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_RETRIES = 3
-DEFAULT_CONCURRENCY = 8
+DEFAULT_THREADS = 8
 
 T = TypeVar("T")
 
@@ -21,7 +21,7 @@ class FastGetError(Exception):
     pass
 
 class ProgressCallback:
-    async def on_start(self, total_size: int, connections: int) -> None:
+    async def on_start(self, total_size: int, threads: int, http_version: str, final_url: str, verify_was_enabled: bool) -> None:
         pass
 
     async def on_update(self, worker_id: int, loaded: int) -> None:
@@ -59,8 +59,8 @@ class FastGetResponse:
         return self._r.json(**kwargs)
 
 class FastGetSession:
-    def __init__(self, max_concurrency: int = DEFAULT_CONCURRENCY, http2: bool = True, verify: bool = True, follow_redirects: bool = True):
-        self.max_concurrency = max_concurrency
+    def __init__(self, max_threads: int = DEFAULT_THREADS, http2: bool = True, verify: bool = True, follow_redirects: bool = True):
+        self.max_threads = max_threads
         self.client_args = {
             "http2": http2,
             "verify": verify,
@@ -68,11 +68,11 @@ class FastGetSession:
             "timeout": DEFAULT_TIMEOUT
         }
 
-    async def _get_info(self, client: httpx.AsyncClient, method: str, url: str, **kwargs) -> tuple[int, bool, bool, httpx.Headers]:
+    async def _get_info(self, client: httpx.AsyncClient, method: str, url: str, **kwargs) -> tuple[int, bool, bool, Optional[httpx.Response]]:
         headers = kwargs.get("headers", {}).copy()
 
         if method.upper() != "GET":
-            return 0, False, False, httpx.Headers()
+            return 0, False, False, None
 
         try:
             head_resp = await client.head(url, headers=headers)
@@ -87,15 +87,15 @@ class FastGetSession:
             accept_ranges = resp.headers.get("accept-ranges", "").lower() == "bytes"
             reject_fg = resp.headers.get("rejectfastget", "").lower() in ["true", "1", "yes"]
 
-            return size, accept_ranges, reject_fg, resp.headers
+            return size, accept_ranges, reject_fg, resp
 
         except Exception:
-            return 0, False, True, httpx.Headers()
+            return 0, False, True, None
 
-    async def _download_worker(self, client: httpx.AsyncClient, method: str, url: str, start: int, end: int, worker_id: int, total_concurrency: int, part_path: str, callback: ProgressCallback, **kwargs) -> None:
+    async def _download_worker(self, client: httpx.AsyncClient, method: str, url: str, start: int, end: int, worker_id: int, total_threads: int, part_path: str, callback: ProgressCallback, **kwargs) -> None:
         headers = kwargs.get("headers", {}).copy()
         headers["Range"] = f"bytes={start}-{end}"
-        headers["User-Agent"] = f'FastGet/{VERSION} (Downloading with {total_concurrency} Thread(s), Connection No. {worker_id}, https://github.com/DiamondGotCat/nercone-fastget)'
+        headers["User-Agent"] = f'FastGet/{VERSION} (Downloading with {total_threads} Thread(s), Connection No. {worker_id}, https://github.com/DiamondGotCat/nercone-fastget)'
         kwargs["headers"] = headers
 
         for attempt in range(DEFAULT_RETRIES):
@@ -126,7 +126,10 @@ class FastGetSession:
         req_kwargs = {"data": data, "json": json, "params": params, "headers": headers}
 
         async with httpx.AsyncClient(**self.client_args) as client:
-            file_size, is_resumable, is_rejected, resp_headers = await self._get_info(client, method, url, **req_kwargs)
+            file_size, is_resumable, is_rejected, info_response = await self._get_info(client, method, url, **req_kwargs)
+
+            if method.upper() == "GET" and not info_response:
+                raise FastGetError(f"Failed to retrieve file information from {url}")
 
             use_parallel = (
                 method.upper() == "GET" and 
@@ -136,8 +139,18 @@ class FastGetSession:
                 output is not None
             )
 
-            concurrency = self.max_concurrency if use_parallel else 1
-            await callback.on_start(file_size, concurrency)
+            threads = self.max_threads if use_parallel else 1
+
+            http_version = info_response.http_version if info_response else "HTTP/1.1"
+            final_url = str(info_response.url) if info_response else url
+
+            await callback.on_start(
+                total_size=file_size,
+                threads=threads,
+                http_version=http_version,
+                final_url=final_url,
+                verify_was_enabled=self.client_args["verify"]
+            )
 
             if output:
                 out_dir = os.path.dirname(output)
@@ -145,20 +158,20 @@ class FastGetSession:
                     os.makedirs(out_dir, exist_ok=True)
 
                 if use_parallel:
-                    part_size = file_size // concurrency
+                    part_size = file_size // threads
                     tasks = []
                     part_files = []
 
-                    for i in range(concurrency):
+                    for i in range(threads):
                         start = part_size * i
-                        end = file_size - 1 if i == concurrency - 1 else start + part_size - 1
+                        end = file_size - 1 if i == threads - 1 else start + part_size - 1
                         
                         part_path = f"{output}.part{i}"
                         part_files.append(part_path)
 
                         tasks.append(
                             self._download_worker(
-                                client, method, url, start, end, i, concurrency, part_path, callback, **req_kwargs
+                                client, method, url, start, end, i, threads, part_path, callback, **req_kwargs
                             )
                         )
 
@@ -223,14 +236,14 @@ def run_sync(coro: Awaitable[T]) -> T:
 
 def download(url: str, output: str, **kwargs) -> str:
     session = FastGetSession(
-        max_concurrency=kwargs.pop("threads", DEFAULT_CONCURRENCY),
+        max_threads=kwargs.pop("threads", DEFAULT_THREADS),
         http2=not kwargs.pop("no_http2", False)
     )
     return run_sync(session.process("GET", url, output=output, **kwargs))
 
 def request(method: str, url: str, **kwargs) -> FastGetResponse:
     session = FastGetSession(
-        max_concurrency=kwargs.pop("threads", DEFAULT_CONCURRENCY),
+        max_threads=kwargs.pop("threads", DEFAULT_THREADS),
         http2=not kwargs.pop("no_http2", False)
     )
     return run_sync(session.process(method, url, output=None, **kwargs))
