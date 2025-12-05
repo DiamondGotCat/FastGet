@@ -1,5 +1,5 @@
 
-<img width="1920" alt="fastget" src="https://github.com/user-attachments/assets/a1c50218-aeda-4273-98f9-1377b373d920" />
+<img width="1920" alt="fastget" src="https://github.com/user-attachments/assets/fb4b6013-f65b-4c34-ae86-848011e7bfcf" />
 
 # FastGet
 High-speed File Downloading Tool
