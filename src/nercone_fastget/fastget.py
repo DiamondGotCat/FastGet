@@ -70,6 +70,7 @@ class FastGetSession:
 
     async def _get_info(self, client: httpx.AsyncClient, method: str, url: str, **kwargs) -> tuple[int, bool, bool, Optional[httpx.Response]]:
         headers = kwargs.get("headers", {}).copy()
+        headers["User-Agent"] = f'FastGet/{VERSION} (Getting Informations, https://github.com/DiamondGotCat/nercone-fastget)'
 
         if method.upper() != "GET":
             return 0, False, False, None
